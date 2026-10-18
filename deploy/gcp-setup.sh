@@ -2,17 +2,24 @@
 # GCP e2-micro 一键初始化脚本
 # 在 GCP 虚拟机网页 SSH 里执行（以普通用户身份）：
 #
-#   curl -fsSL https://raw.githubusercontent.com/kevinhfwang/stremio-prowlarr-rd-addon/main/deploy/gcp-setup.sh | bash -s -- stremio.你的域名.com prowlarr.你的域名.com
+#   curl -fsSL https://raw.githubusercontent.com/kevinhfwang/stremio-prowlarr-rd-addon/main/deploy/gcp-setup.sh | bash -s -- stremio.你的域名.com prowlarr.你的域名.com [duckdns_token]
+#
+# 参数 3 可选：DuckDNS Token。提供后会自动安装 cron，每 5 分钟把本机 IP
+# 同步到 DuckDNS（GCP 临时 IP 重启会变，同步后域名永不离线）。
 #
 # 前置条件：
-#   1. DNS 的 A 记录已指向本机外部 IP（Caddy 签证书用，可用临时 IP 先跑，签证书前必须生效）
+#   1. DNS 的 A 记录已指向本机外部 IP（Caddy 签证书用）
+#      - 自有域名：去 DNS 服务商加 A 记录
+#      - 没有域名：去 duckdns.org 免费注册两个子域名（如 xxxstremio / xxxprowlarr），
+#        先随便指个 IP，脚本里的 cron 会自动校正
 #   2. GCP 防火墙已放行 80/443（建 VM 时勾选 Allow HTTP/HTTPS 即可）
 set -euo pipefail
 
 STREMIO_DOMAIN="${1:-}"
 PROWLARR_DOMAIN="${2:-}"
+DUCKDNS_TOKEN="${3:-}"
 if [[ -z "$STREMIO_DOMAIN" || -z "$PROWLARR_DOMAIN" ]]; then
-  echo "用法: $0 <stremio_domain> <prowlarr_domain>" >&2
+  echo "用法: $0 <stremio_domain> <prowlarr_domain> [duckdns_token]" >&2
   exit 1
 fi
 
@@ -42,6 +49,20 @@ cat > .env <<EOF
 STREMIO_DOMAIN=$STREMIO_DOMAIN
 PROWLARR_DOMAIN=$PROWLARR_DOMAIN
 EOF
+
+echo "==> [3.5/5] 同步 DuckDNS IP（Caddy 签证书前 DNS 必须已指向本机）"
+if [[ -n "$DUCKDNS_TOKEN" ]]; then
+  # 从完整域名提取 DuckDNS 子域名部分：kevinstremio.duckdns.org → kevinstremio
+  DD1="${STREMIO_DOMAIN%%.*}"
+  DD2="${PROWLARR_DOMAIN%%.*}"
+  # 安装 cron 定时同步（GCP 临时 IP 重启会变，同步后域名永不离线）
+  echo "*/5 * * * * root curl -fsS 'https://www.duckdns.org/update?domains=${DD1},${DD2}&token=${DUCKDNS_TOKEN}&ip=' >/dev/null 2>&1" | sudo tee /etc/cron.d/duckdns >/dev/null
+  # 立即同步一次
+  curl -fsS "https://www.duckdns.org/update?domains=${DD1},${DD2}&token=${DUCKDNS_TOKEN}&ip=" || true
+  echo ""
+else
+  echo "（未提供 DuckDNS Token，跳过——请确认自有域名 A 记录已指向本机 IP）"
+fi
 
 echo "==> [4/5] 启动 Prowlarr + 插件 + Caddy（首次拉镜像约 2-3 分钟）"
 sudo docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
