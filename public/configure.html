@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stremio Prowlarr + Real-Debrid 插件配置</title>
+<style>
+  :root {
+    --bg: #0f1220; --card: #1a1f36; --border: #2a3052;
+    --text: #e6e9f5; --dim: #8b93b8; --accent: #6c8cff; --accent2: #3ddc97;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+    background: radial-gradient(1200px 600px at 20% -10%, #232a55 0%, var(--bg) 55%);
+    color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px; width: 100%; max-width: 520px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  h1 { font-size: 20px; margin-bottom: 6px; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 24px; line-height: 1.6; }
+  label { display: block; font-size: 13px; color: var(--dim); margin: 16px 0 6px; }
+  input[type=text], input[type=password], input[type=url] {
+    width: 100%; padding: 11px 13px; border-radius: 9px;
+    border: 1px solid var(--border); background: #12162b; color: var(--text);
+    font-size: 14px; outline: none; transition: border-color .15s;
+  }
+  input:focus { border-color: var(--accent); }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 5px; line-height: 1.5; }
+  .toggle-row {
+    display: flex; align-items: center; gap: 10px; margin: 22px 0 4px;
+    padding: 13px 15px; border: 1px solid var(--border); border-radius: 10px;
+    background: #12162b; cursor: pointer;
+  }
+  .toggle-row input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+  .toggle-row .t { font-size: 14px; }
+  .toggle-row .d { font-size: 12px; color: var(--dim); }
+  button {
+    width: 100%; margin-top: 24px; padding: 13px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), #4a6cf7); color: #fff;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.1); }
+  #result { display: none; margin-top: 22px; }
+  #result .url-box {
+    background: #0b0e1c; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; font-size: 12px; word-break: break-all; color: var(--accent2);
+    margin: 8px 0;
+  }
+  #result a { color: var(--accent2); }
+  .err { color: #ff6b81; font-size: 13px; margin-top: 10px; display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>⚙️ Stremio Prowlarr + Real-Debrid 插件</h1>
+  <div class="sub">
+    填入你的 Prowlarr 与 Real-Debrid 凭证，生成 Stremio 安装链接。
+    成人分类默认关闭，只有显式勾选后才会出现在 Stremio 目录中。
+  </div>
+
+  <label for="prowlarrUrl">Prowlarr 地址</label>
+  <input type="url" id="prowlarrUrl" placeholder="http://localhost:9696 或 https://prowlarr.你的域名.com" />
+  <div class="hint">Prowlarr 设置 → 通用 → API Key 上方可见本机地址；若是 HTTPS 反代请填公网地址</div>
+
+  <label for="prowlarrKey">Prowlarr API Key</label>
+  <input type="password" id="prowlarrKey" placeholder="Prowlarr → Settings → General → API Key" />
+
+  <label for="rdKey">Real-Debrid API Key（可选）</label>
+  <input type="password" id="rdKey" placeholder="https://real-debrid.com/apitoken 页面获取" />
+  <div class="hint">不填也能用，但只能走内置磁力下载；填了才支持云端秒播</div>
+
+  <div class="toggle-row" onclick="document.getElementById('enableAdult').click()">
+    <input type="checkbox" id="enableAdult" onclick="event.stopPropagation()" />
+    <div>
+      <div class="t">🔞 启用成人分类 (Adult / 18+)</div>
+      <div class="d">开启后 Stremio 目录中将出现"成人影片"，通过 Prowlarr 中已配置的成人索引器（如 Sukebei）检索</div>
+    </div>
+  </div>
+
+  <div class="err" id="err"></div>
+  <button onclick="generate()">生成安装链接</button>
+
+  <div id="result">
+    <label>Stremio 一键安装：</label>
+    <div class="url-box" id="stremioUrl"></div>
+    <label>Manifest 地址（手动安装用）：</label>
+    <div class="url-box" id="manifestUrl"></div>
+  </div>
+</div>
+
+<script>
+function generate() {
+  const err = document.getElementById('err');
+  err.style.display = 'none';
+
+  const prowlarrUrl = document.getElementById('prowlarrUrl').value.trim().replace(/\/+$/, '');
+  const prowlarrKey = document.getElementById('prowlarrKey').value.trim();
+  const rdKey       = document.getElementById('rdKey').value.trim();
+  const enableAdult = document.getElementById('enableAdult').checked;
+
+  if (!prowlarrUrl || !/^https?:\/\//.test(prowlarrUrl)) {
+    err.textContent = '请填写合法的 Prowlarr 地址（以 http:// 或 https:// 开头）';
+    err.style.display = 'block'; return;
+  }
+  if (!prowlarrKey) {
+    err.textContent = 'Prowlarr API Key 不能为空';
+    err.style.display = 'block'; return;
+  }
+
+  const config = { prowlarrUrl, prowlarrKey, rdKey, enableAdult };
+  // base64url 编码，避免 JSON 特殊字符破坏 URL；Node 端 parseConfig 会还原
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(config))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  const origin = location.origin;
+  document.getElementById('stremioUrl').innerHTML =
+    `<a href="stremio://${location.host}/${b64}/manifest.json">stremio://${location.host}/${b64}/manifest.json</a>`;
+  document.getElementById('manifestUrl').textContent =
+    `${origin}/${b64}/manifest.json`;
+  document.getElementById('result').style.display = 'block';
+}
+</script>
+</body>
+</html>

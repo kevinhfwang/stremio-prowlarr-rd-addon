@@ -1,0 +1,26 @@
+{
+  "name": "stremio-prowlarr-rd-addon",
+  "version": "1.0.0",
+  "description": "Stremio 第三方聚合插件：Prowlarr 索引器聚合 + Real-Debrid 云端秒播，支持可选成人分类 (18+)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "stremio",
+    "addon",
+    "prowlarr",
+    "real-debrid",
+    "torrent"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "express": "^4.21.2",
+    "stremio-addon-sdk": "^1.6.10"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,11 @@
+# Render Blueprint 定义
+# 用法：Render 后台 → New → Blueprint → 选择本仓库 → 自动识别本文件部署
+services:
+  - type: web
+    name: stremio-prowlarr-rd
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 7000

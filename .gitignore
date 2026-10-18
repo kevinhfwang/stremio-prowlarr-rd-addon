@@ -1,0 +1,5 @@
+node_modules/
+prowlarr-config/
+*.log
+.DS_Store
+*.zip
