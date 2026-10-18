@@ -71,6 +71,32 @@ npm start
 #    点"生成安装链接" → 点 stremio:// 链接一键安装
 ```
 
+## 部署到 GCP e2-micro 免费层（推荐，无需 Oracle）
+
+GCP 永远免费层：1 台 e2-micro（美区）+ 30GB 标准盘，足够跑全套。
+
+1. 注册 [cloud.google.com](https://cloud.google.com)（绑卡验证，送 $300/90 天试用金）
+2. 建 VM：`Compute Engine → VM instances → Create`
+   - **区域必须是 us-west1 / us-central1 / us-east1**（只有这三区的 e2-micro 免费）
+   - 机型：`e2-micro`，系统 Ubuntu 22.04
+   - 磁盘：**Standard persistent disk，30GB**（ balanced/SSD 不免费）
+   - 勾选 **Allow HTTP traffic / Allow HTTPS traffic**
+3. 建好后点 VM 行的 **SSH**（浏览器终端），粘贴一条命令：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kevinhfwang/stremio-prowlarr-rd-addon/main/deploy/gcp-setup.sh | bash -s -- stremio.你的域名.com prowlarr.你的域名.com
+```
+
+脚本自动完成：2GB swap → 装 Docker → 拉代码 → 启动 Prowlarr + 插件 + Caddy（自动 HTTPS）。
+
+4. 去 DNS 加两条 A 记录指向 VM 外部 IP（`stremio.域名`、`prowlarr.域名`）
+5. 打开 `https://prowlarr.你的域名` 配置索引器，再到 `https://stremio.你的域名/configure` 生成安装链接
+
+**免费层避坑**：
+- VM 停机时静态 IP 会计费，要么不建静态 IP，要么保证机器常开
+- 免费出站流量 1GB/月；本插件流量极小（RD 直链是播放器直连，不过服务器）
+- 建议 Billing → Budgets 建个 $1 告警
+
 ## 部署到 Oracle Cloud 免费 VPS（ARM 架构也支持）
 
 ```bash

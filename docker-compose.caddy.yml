@@ -1,0 +1,31 @@
+# GCP 公网部署专用：Caddy 自动 HTTPS 反代（本地联调不需要本文件）
+#
+# 用法（在服务器上）：
+#   1. 在项目根目录建 .env，写入两行：
+#        STREMIO_DOMAIN=stremio.你的域名.com
+#        PROWLARR_DOMAIN=prowlarr.你的域名.com
+#   2. docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      PROWLARR_DOMAIN: ${PROWLARR_DOMAIN:?请先在 .env 设置 PROWLARR_DOMAIN}
+      STREMIO_DOMAIN: ${STREMIO_DOMAIN:?请先在 .env 设置 STREMIO_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # 证书持久化（续期凭证，绝不能丢）
+      - caddy-config:/config
+    depends_on:
+      - prowlarr
+      - stremio-addon
+
+volumes:
+  caddy-data:
+  caddy-config:

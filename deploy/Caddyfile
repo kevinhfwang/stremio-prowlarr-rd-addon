@@ -1,0 +1,9 @@
+# Caddy 反代配置：由 docker-compose.caddy.yml 挂载进容器
+# 域名通过环境变量注入（见 .env），Caddy 会自动申请并续期 Let's Encrypt 证书
+{$PROWLARR_DOMAIN}
+
+reverse_proxy prowlarr:9696
+
+{$STREMIO_DOMAIN}
+
+reverse_proxy stremio-addon:7000
