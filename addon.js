@@ -258,18 +258,30 @@ function buildAddon(config) {
       }
     }
 
-    // ---- 回退：裸 infoHash 磁力流（Stremio 内置 BitTorrent 引擎可播） ----
-    const DEFAULT_TRACKERS = ['udp://open.tracker.cl:1337/announce'];
+    // ---- 回退：磁力流（Stremio 内置 BitTorrent 引擎可播） ----
+    // 注意：有完整 magnet 时优先直接给 url——Stremio 会把它原样交给
+    // 引擎，dn/tr 参数保真。只给 infoHash+sources 的话，Stremio 会自己
+    // 拼 magnet，sources 里的地址被原样塞进 tr= 导致非法（不能带 tracker: 前缀）。
     for (const hash of infoHashes) {
       const r = byHash.get(hash) || {};
-      // 私有 PT 站的 tracker 带 passkey，带上它 Stremio 引擎才能找到做种者
-      const trackers = (r.trackers && r.trackers.length ? r.trackers : DEFAULT_TRACKERS)
-        .map((t) => `tracker:${t}`);
+      if (r.magnetUrl) {
+        streams.push({
+          name: `磁力 ${qualityTag(r.title || '')}`,
+          title: `${r.title || hash}\n📦 ${humanSize(r.size)} · 做种 ${r.seeders} · ${r.indexer || '未知'}`,
+          url: r.magnetUrl,
+          behaviorHints: { bingeGroup: `mg-${hash}` }
+        });
+        continue;
+      }
+      // 实测：Stremio 会把 sources 原样拼进 magnet 的 tr= 参数，
+      // 所以这里必须给裸地址，不能带 tracker: 前缀
+      const sources = (r.trackers && r.trackers.length ? r.trackers : [])
+        .map((t) => t.replace(/^tracker:/, ''));
       streams.push({
         name: `磁力 ${qualityTag(r.title || '')}`,
         title: `${r.title || hash}\n📦 ${humanSize(r.size)} · 做种 ${r.seeders} · ${r.indexer || '未知'}`,
         infoHash: hash,
-        sources: trackers
+        sources
       });
     }
 
