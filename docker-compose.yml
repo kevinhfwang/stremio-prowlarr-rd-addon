@@ -20,6 +20,17 @@ services:
       - "9696:9696"
     restart: unless-stopped
 
+  # Cloudflare 解盾器：Prowlarr 添加索引器时报 "blocked by CloudFlare Protection"
+  # 的站点会自动改走这里。在 Prowlarr → Settings → Indexers → FlareSolverr 填：
+  #   http://flaresolverr:8191
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - TZ=Europe/Madrid
+      - LOG_LEVEL=info
+    restart: unless-stopped
+
   stremio-addon:
     build: .
     container_name: stremio-prowlarr-rd
