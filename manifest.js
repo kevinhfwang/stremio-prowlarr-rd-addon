@@ -31,16 +31,20 @@ const CATEGORIES = {
  */
 function buildManifest(config) {
   // 常规目录：电影 + 剧集
+  // extra: [{name:'search'}] 是关键声明——告诉 Stremio 该目录支持搜索，
+  // 客户端才会在目录页显示搜索框并把关键词以 extra.search 传过来
   const catalogs = [
     {
       type: 'movie',
       id: 'prowlarr-movie',
-      name: 'Prowlarr 电影搜索'
+      name: 'Prowlarr 电影搜索',
+      extra: [{ name: 'search' }]
     },
     {
       type: 'series',
       id: 'prowlarr-series',
-      name: 'Prowlarr 剧集搜索'
+      name: 'Prowlarr 剧集搜索',
+      extra: [{ name: 'search' }]
     }
   ];
 
@@ -51,7 +55,8 @@ function buildManifest(config) {
     catalogs.push({
       type: 'movie',
       id: 'prowlarr-adult',
-      name: '成人影片 (18+)'
+      name: '成人影片 (18+)',
+      extra: [{ name: 'search' }]
     });
   }
 
