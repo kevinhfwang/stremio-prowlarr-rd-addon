@@ -19,6 +19,8 @@ services:
     ports:
       - "9696:9696"
     restart: unless-stopped
+    # 1GB 内存机器的保命上限：单容器最多吃 350MB，超额自己崩，不拖垮整机
+    mem_limit: 350m
 
   # Cloudflare 解盾器：Prowlarr 添加索引器时报 "blocked by CloudFlare Protection"
   # 的站点会自动改走这里。在 Prowlarr → Settings → Indexers → FlareSolverr 填：
@@ -30,6 +32,8 @@ services:
       - TZ=Europe/Madrid
       - LOG_LEVEL=info
     restart: unless-stopped
+    # Chrome 是无头内存怪兽，必须上笼头；解盾失败最多重试，不能杀整机
+    mem_limit: 300m
 
   stremio-addon:
     build: .
@@ -39,5 +43,6 @@ services:
     environment:
       - PORT=7000
     restart: unless-stopped
+    mem_limit: 150m
     depends_on:
       - prowlarr
