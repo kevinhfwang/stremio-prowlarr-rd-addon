@@ -70,8 +70,11 @@ function buildManifest(config) {
     logo: 'https://stremio.com/website/stremio-logo.png',
     // 支持的媒体类型：movie 与 series（成人目录挂在 movie 下）
     types: ['movie', 'series'],
-    // 提供的资源类型：目录（catalog）+ 播放流（stream）
-    resources: ['catalog', 'stream'],
+    // 提供的资源类型：目录（catalog）+ 播放流（stream）+ 元数据（meta）
+    // meta 必须实现：目录条目用 rd:<hash> 自建 id，Cinemeta 查不到，
+    // 若没有 meta handler，Stremio 点进条目会直接报
+    // "no addons were requested for this meta"，连流都不会请求
+    resources: ['catalog', 'stream', 'meta'],
     catalogs: catalogs,
     // idPrefixes 不限制，因为成人目录条目用 "rd:<infoHash>" 自建 id
     behaviorHints: {

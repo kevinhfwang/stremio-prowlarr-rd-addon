@@ -159,6 +159,28 @@ function buildAddon(config) {
   });
 
   /**
+   * 元数据 handler：Stremio 点开目录条目时先请求它渲染详情页。
+   * 我们只为自己目录创建的 rd:<hash> 条目提供 meta（从 catalogMemory 回溯），
+   * IMDb 条目（tt...）返回 null，交给官方 Cinemeta。
+   */
+  builder.defineMetaHandler(async ({ type, id }) => {
+    if (!id.startsWith('rd:')) return { meta: null };
+    const hash = id.slice(3).toLowerCase();
+    const r = recallRelease(hash);
+    return {
+      meta: {
+        id,
+        type: 'movie',
+        name: r ? r.title : hash,
+        description: r
+          ? `索引器: ${r.indexer}\n大小: ${humanSize(r.size)}\n做种: ${r.seeders}`
+          : '',
+        poster: null // 无海报源，Stremio 会显示占位图
+      }
+    };
+  });
+
+  /**
    * 播放流 handler：args = { type, id }
    * id 两种形态：'rd:<infoHash>'（本插件目录）或 IMDb id（官方 Cinemeta 目录）
    */
