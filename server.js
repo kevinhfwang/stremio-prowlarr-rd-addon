@@ -88,6 +88,10 @@ app.get('/', (req, res) => {
 // 注意必须在 /:config 通配之前注册，否则会被当成配置段解析
 app.get('/health', (req, res) => res.json({ ok: true }));
 
+// Stremio 安装含 configurable 声明的插件后，会自动打开
+// <插件地址>/<config>/configure —— 重定向到根配置页
+app.get('/:config/configure', (req, res) => res.redirect('/configure'));
+
 // 关键：Express 的 app.use 支持路径参数，把 /:config 后面的所有子路径
 // 转交给为该配置实时构建的 SDK 路由处理：
 //   /<config>/manifest.json
