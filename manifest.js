@@ -70,8 +70,9 @@ function buildManifest(config) {
     catalogs: catalogs,
     // idPrefixes 不限制，因为成人目录条目用 "rd:<infoHash>" 自建 id
     behaviorHints: {
-      configurable: true, // 声明本插件有配置页
-      configurationRequired: true // 必须先配置 Prowlarr/Real-Debrid 才能用
+      configurable: true // 声明本插件有配置页（安装后显示配置按钮）
+      // 注意：不要写 configurationRequired:true —— 那会阻止 Stremio 直接安装，
+      // 变成永远往配置页踢的死循环。本插件配置已编码在安装 URL 里，无需此标记。
     }
   };
 }
