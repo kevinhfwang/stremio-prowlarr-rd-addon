@@ -212,14 +212,17 @@ function buildAddon(config) {
     }
 
     // ---- 回退：裸 infoHash 磁力流（Stremio 内置 BitTorrent 引擎可播） ----
+    const DEFAULT_TRACKERS = ['udp://open.tracker.cl:1337/announce'];
     for (const hash of infoHashes) {
       const r = byHash.get(hash) || {};
+      // 私有 PT 站的 tracker 带 passkey，带上它 Stremio 引擎才能找到做种者
+      const trackers = (r.trackers && r.trackers.length ? r.trackers : DEFAULT_TRACKERS)
+        .map((t) => `tracker:${t}`);
       streams.push({
         name: `磁力 ${qualityTag(r.title || '')}`,
         title: `${r.title || hash}\n📦 ${humanSize(r.size)} · 做种 ${r.seeders} · ${r.indexer || '未知'}`,
         infoHash: hash,
-        // 磁力需要完整 dn 显示名，便于 Stremio 引擎解析
-        sources: [`tracker:udp://open.tracker.cl:1337/announce`]
+        sources: trackers
       });
     }
 
