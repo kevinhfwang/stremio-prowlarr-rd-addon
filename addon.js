@@ -87,6 +87,25 @@ async function cinemetaLookup(type, imdbId) {
   }
 }
 
+// ---- catalog → stream 的结果暂存 ----
+// 用户在目录里点条目时，stream handler 收到的只有 "rd:<hash>"，
+// 需要找回这条 release 的标题/tracker（尤其私有 PT 站的 passkey tracker）。
+// 两个 handler 跑在同一进程，用模块级 Map 共享，TTL 1 小时。
+const catalogMemory = new Map(); // infoHash -> { release, time }
+
+function rememberReleases(releases) {
+  for (const r of releases) {
+    if (r.infoHash) catalogMemory.set(r.infoHash, { release: r, time: Date.now() });
+  }
+}
+
+function recallRelease(hash) {
+  const entry = catalogMemory.get(hash);
+  if (entry && Date.now() - entry.time < 60 * 60 * 1000) return entry.release;
+  catalogMemory.delete(hash);
+  return null;
+}
+
 /**
  * 构建一个绑定到指定用户配置的 addon 实例。
  * 每次请求都调用本函数重建（配置在 URL 里，理论上每个用户配置都不同）。
@@ -121,6 +140,8 @@ function buildAddon(config) {
       limit: 20
     });
 
+    rememberReleases(releases); // 供 stream handler 回溯标题/tracker
+
     return {
       metas: releases
         // 只有能拿到 infoHash 的条目才进目录（保证点进去一定有流）
@@ -146,9 +167,13 @@ function buildAddon(config) {
     let releases = null; // 或直接拿到一组候选 release
 
     if (id.startsWith('rd:')) {
-      // 来自我们自己的目录，hash 已知
+      // 来自我们自己的目录：先查 catalog 暂存找回完整信息，没有再退化为裸 hash
       const h = id.slice(3).toLowerCase();
       infoHashes = [h];
+      const remembered = recallRelease(h);
+      if (remembered) {
+        releases = [remembered];
+      }
     } else {
       // IMDb id（剧集 id 形如 tt1234567:1:3，去掉季季后缀）
       const imdbId = id.split(':')[0];
