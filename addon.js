@@ -106,6 +106,67 @@ function recallRelease(hash) {
   return null;
 }
 
+// ---- 海报补全 ----
+// 目录条目是 rd:<hash> 自建 id，Cinemeta 官方库查不到、Stremio 显示占位图。
+// 但片名已知：清洗掉 release 后缀（画质/编码/俄语段），拿干净片名去 Cinemeta
+// 的 top 目录搜，把海报/背景图补进 meta。
+const posterCache = new Map();
+const POSTER_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+/** 从 release 标题提取干净的搜索片名 + 年份 */
+function cleanTitle(raw) {
+  let t = String(raw || '');
+  // 多语种子标题取拉丁字母最多的段：「Начало / Inception (2010) ...」→「Inception (2010) ...」
+  if (t.includes('/')) {
+    const segs = t.split('/').map((s) => s.trim());
+    const latin = (s) => (s.match(/[a-zA-Z]/g) || []).length;
+    const best = segs.reduce((a, b) => (latin(b) > latin(a) ? b : a));
+    if (latin(best) > 0) t = best;
+  }
+  // 从画质/编码标记处截断（这些后缀全是种子信息，不是片名）
+  t = t.replace(
+    /\b(2160p|1080p|720p|480p|4k|uhd|bluray|bdrip|brrip|web[- ]?dl|webrip|hdtv|hdrip|remux|cam|hdcam|telesync|dvdscr|dvdrip|xvid|x26[45]|h26[45]|hevc|avc|mp4|mkv|dub|licension|лицензия)\b.*$/i,
+    ''
+  );
+  const ym = t.match(/\b(19|20)\d{2}\b/);
+  const year = ym ? ym[0] : null;
+  t = t
+    .replace(/[\[\(（【].*?[\]\)）】]/g, ' ') // 去括号内容
+    .replace(/[._]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { query: t, year };
+}
+
+/** 拿片名去 Cinemeta 搜海报，24h 缓存 */
+async function cinemetaPoster(rawTitle) {
+  const { query, year } = cleanTitle(rawTitle);
+  if (query.length < 2) return null;
+  const key = `${query}|${year || ''}`;
+  const hit = posterCache.get(key);
+  if (hit && Date.now() - hit.t < POSTER_CACHE_TTL) return hit.poster;
+  try {
+    const axios = require('axios');
+    const { data } = await axios.get(
+      `https://v3-cinemeta.strem.io/catalog/movie/top/search=${encodeURIComponent(query)}.json`,
+      { timeout: 8000 }
+    );
+    const metas = (data && data.metas) || [];
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const nq = norm(query);
+    // 优先「标准化片名完全相等 + 年份一致」，其次只比片名，最后前缀匹配
+    const best =
+      metas.find((m) => norm(m.name) === nq && year && String(m.year) === year) ||
+      metas.find((m) => norm(m.name) === nq) ||
+      metas.find((m) => nq && (norm(m.name).startsWith(nq) || nq.startsWith(norm(m.name))));
+    const poster = best ? { poster: best.poster, background: best.background } : null;
+    posterCache.set(key, { t: Date.now(), poster });
+    return poster;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 构建一个绑定到指定用户配置的 addon 实例。
  * 每次请求都调用本函数重建（配置在 URL 里，理论上每个用户配置都不同）。
@@ -142,20 +203,30 @@ function buildAddon(config) {
 
     rememberReleases(releases); // 供 stream handler 回溯标题/tracker
 
-    return {
-      metas: releases
-        // 只有能拿到 infoHash 的条目才进目录（保证点进去一定有流）
-        .filter((r) => r.infoHash)
-        .map((r) => ({
-          id: `rd:${r.infoHash}`,
-          type: 'movie',
-          name: r.title,
-          // 用文本徽标充当封面（成人内容没有海报源，避免外链 404）
-          poster: null,
-          description:
-            `索引器: ${r.indexer}\n大小: ${humanSize(r.size)}\n做种: ${r.seeders}`
-        }))
-    };
+    const metas = releases
+      // 只有能拿到 infoHash 的条目才进目录（保证点进去一定有流）
+      .filter((r) => r.infoHash)
+      .map((r) => ({
+        id: `rd:${r.infoHash}`,
+        type: 'movie',
+        name: r.title,
+        poster: null,
+        description:
+          `索引器: ${r.indexer}\n大小: ${humanSize(r.size)}\n做种: ${r.seeders}`
+      }));
+
+    // 补海报：前 8 条并发查 Cinemeta（24h 缓存，重复搜索零开销）
+    await Promise.all(
+      metas.slice(0, 8).map(async (meta) => {
+        const p = await cinemetaPoster(meta.name);
+        if (p) {
+          meta.poster = p.poster;
+          meta.background = p.background;
+        }
+      })
+    );
+
+    return { metas };
   });
 
   /**
@@ -167,6 +238,7 @@ function buildAddon(config) {
     if (!id.startsWith('rd:')) return { meta: null };
     const hash = id.slice(3).toLowerCase();
     const r = recallRelease(hash);
+    const p = r ? await cinemetaPoster(r.title) : null; // 详情页也补上海报
     return {
       meta: {
         id,
@@ -175,7 +247,8 @@ function buildAddon(config) {
         description: r
           ? `索引器: ${r.indexer}\n大小: ${humanSize(r.size)}\n做种: ${r.seeders}`
           : '',
-        poster: null // 无海报源，Stremio 会显示占位图
+        poster: p ? p.poster : null,
+        background: p ? p.background : null
       }
     };
   });
