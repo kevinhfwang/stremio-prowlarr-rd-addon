@@ -29,6 +29,7 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 const { searchProwlarr } = require('./lib/prowlarr');
 const { getInstantHashes, resolveMagnet } = require('./lib/realdebrid');
+const { coverForTitle } = require('./lib/jav');
 const { buildManifest } = require('./manifest');
 
 /**
@@ -215,13 +216,19 @@ function buildAddon(config) {
           `索引器: ${r.indexer}\n大小: ${humanSize(r.size)}\n做种: ${r.seeders}`
       }));
 
-    // 补海报：前 8 条并发查 Cinemeta（24h 缓存，重复搜索零开销）
+    // 补海报：前 8 条并发。成人目录（Cinemeta 无成人内容）先从种子标题提取番号
+    // 查 JavDB 拿封面；常规目录及成人未命中番号时走 Cinemeta。均有缓存。
     await Promise.all(
       metas.slice(0, 8).map(async (meta) => {
-        const p = await cinemetaPoster(meta.name);
+        let p = null;
+        if (target === 'adult') {
+          const jav = await coverForTitle(meta.name);
+          if (jav) p = { poster: jav };
+        }
+        if (!p) p = await cinemetaPoster(meta.name);
         if (p) {
           meta.poster = p.poster;
-          meta.background = p.background;
+          if (p.background) meta.background = p.background;
         }
       })
     );
@@ -238,7 +245,12 @@ function buildAddon(config) {
     if (!id.startsWith('rd:')) return { meta: null };
     const hash = id.slice(3).toLowerCase();
     const r = recallRelease(hash);
-    const p = r ? await cinemetaPoster(r.title) : null; // 详情页也补上海报
+    // 详情页海报：番号条目优先 JavDB（成人内容 Cinemeta 没有），其余走 Cinemeta
+    let p = null;
+    if (r) {
+      const jav = await coverForTitle(r.title);
+      p = jav ? { poster: jav } : await cinemetaPoster(r.title);
+    }
     return {
       meta: {
         id,
