@@ -1,5 +1,8 @@
 node_modules/
 prowlarr-config/
+addon-data/
+data/*.json
+!data/config.json
 *.log
 .DS_Store
 *.zip

@@ -43,6 +43,11 @@ services:
       - "7000:7000"
     environment:
       - PORT=7000
+      # 配置落盘加密密钥（可选但强烈建议）：openssl rand -hex 32 生成
+      # - CONFIG_SECRET=换成随机串
+    volumes:
+      # token→配置 映射的持久化（不挂的话容器重建后旧安装链接全部失效）
+      - ./addon-data:/app/data
     restart: unless-stopped
     mem_limit: 150m
     depends_on:

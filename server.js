@@ -21,9 +21,20 @@ const express = require('express');
 const { getRouter } = require('stremio-addon-sdk');
 const { buildAddon, parseConfig, encodeConfig } = require('./addon');
 const { resolveMagnet } = require('./lib/realdebrid');
+const tokenstore = require('./lib/tokenstore');
 
 const PORT = process.env.PORT || 7000;
 const app = express();
+
+// 支持两种配置段：
+//   1. token（推荐）：configure 页 POST /api/config 后颁发的随机串，服务端映射到完整配置
+//   2. 旧版 base64url 配置：向后兼容已有安装链接（其中含明文 key，建议尽快重新生成链接）
+function resolveSegment(seg) {
+  try {
+    return parseConfig(seg);
+  } catch {}
+  return tokenstore.resolve(seg);
+}
 
 // ---------------------------------------------------------------------------
 // 1. RD 直链代理（必须在 /:config 通配之前注册，避免被 SDK 路由吃掉）
@@ -35,7 +46,10 @@ const PROXY_CACHE_TTL = 5 * 60 * 1000;
 
 app.get('/proxy/:config/:hash/:idx', async (req, res) => {
   try {
-    const config = parseConfig(req.params.config);
+    const config = resolveSegment(req.params.config);
+    if (!config) {
+      return res.status(400).send('无效的配置段。请访问 /configure 重新生成安装链接。');
+    }
     if (!config.rdKey) {
       return res.status(400).send('该配置未设置 Real-Debrid API Key');
     }
@@ -68,11 +82,31 @@ app.get('/proxy/:config/:hash/:idx', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. 配置页面
+// 2. 配置页面 + 配置颁发接口
 // ---------------------------------------------------------------------------
 
 app.get('/configure', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'configure.html'));
+});
+
+// configure 页提交配置 → 服务端存配置、颁发 token。
+// 返回的安装链接只含随机 token，不含任何明文 key。
+app.post('/api/config', express.json({ limit: '8kb' }), (req, res) => {
+  const b = req.body || {};
+  const config = {
+    prowlarrUrl: String(b.prowlarrUrl || '').trim().replace(/\/+$/, ''),
+    prowlarrKey: String(b.prowlarrKey || '').trim(),
+    rdKey: String(b.rdKey || '').trim(),
+    enableAdult: Boolean(b.enableAdult)
+  };
+  if (!/^https?:\/\//.test(config.prowlarrUrl)) {
+    return res.status(400).json({ error: 'Prowlarr 地址必须以 http:// 或 https:// 开头' });
+  }
+  if (!config.prowlarrKey) {
+    return res.status(400).json({ error: 'Prowlarr API Key 不能为空' });
+  }
+  const token = tokenstore.issue(config);
+  res.json({ token, manifestPath: `/${token}/manifest.json` });
 });
 
 // ---------------------------------------------------------------------------
@@ -98,13 +132,11 @@ app.get('/:config/configure', (req, res) => res.redirect('/configure'));
 //   /<config>/catalog/movie/prowlarr-adult/search=xxx.json
 //   /<config>/stream/movie/rd:<hash>.json
 app.use('/:config', (req, res, next) => {
-  let config;
-  try {
-    config = parseConfig(req.params.config);
-  } catch (err) {
+  const config = resolveSegment(req.params.config);
+  if (!config) {
     return res
       .status(400)
-      .send('无效的配置段。请访问 /configure 生成安装链接。<br>' + err.message);
+      .send('无效的配置段。请访问 /configure 生成安装链接。');
   }
   // 每个请求按配置构建 addon 实例（manifest 内容随成人开关变化）
   const router = getRouter(buildAddon(config));

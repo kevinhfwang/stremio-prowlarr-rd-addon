@@ -125,5 +125,7 @@ sudo systemctl reload caddy
 
 ## 安全提示
 
-- 配置（含 Prowlarr/RD Key）以 base64url 编码放在安装 URL 里——**这是编码不是加密**，只防君子不防小人。插件只被自己家人用没问题；要公开分享请先加一层访问控制。
-- RD 直链代理只带你自己的 RD 账户鉴权，别人拿到安装链接等于用你的 RD 流量。
+- **安装链接只含随机 token，不含明文 key**：配置在 `/configure` 提交后由服务端（`lib/tokenstore.js`）落盘保存（`./addon-data` 卷，设 `CONFIG_SECRET` 环境变量可 AES-256-GCM 加密落盘），URL 里只有 128 位随机 token。拿到链接的人**可以使用**插件（消耗你的 RD 流量/Prowlarr 索引器）但**解不出**原始 key；服务器访问日志里也只出现 token。
+- 吊销方式：删 `addon-data/tokens.json` 里对应行并重启容器。想换 key 同样改配置重新生成链接即可（相同配置幂等返回同一 token）。
+- 兼容期注意：旧版 base64url 配置段仍可解析（已有安装链接不断），但那段是**可解码的明文 key**，升级后请重新生成安装链接并尽快在 RD/Prowlarr 侧重置已暴露过的 key。
+- RD 直链代理只带你自己的 RD 账户鉴权，别人拿到 token 链接等于用你的 RD 流量——分享链接前想清楚。

@@ -14,6 +14,9 @@ ENV NODE_ENV=production \
 # 非 root 运行，安全基线
 RUN addgroup -S stremio && adduser -S stremio -G stremio
 
+# token → 配置的映射文件落盘目录（compose 里挂卷持久化，重启不丢安装链接）
+RUN mkdir -p /app/data && chown stremio:stremio /app/data
+
 COPY --from=builder /app/node_modules ./node_modules
 COPY package.json ./
 COPY server.js addon.js manifest.js ./
